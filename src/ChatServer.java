@@ -12,6 +12,7 @@ public class ChatServer {
   // Decoder for incoming text -- assume UTF-8
   static private final Charset charset = Charset.forName("UTF8");
   static private final CharsetDecoder decoder = charset.newDecoder();
+  static private final List<String> messages = new ArrayList<>();
 
   static public void main(String args[]) throws Exception {
     // Parse port from command line
@@ -70,50 +71,15 @@ public class ChatServer {
             sc.configureBlocking(false);
 
             // Register it with the selector, for reading
-            sc.register(selector, SelectionKey.OP_READ);
+            sc.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
-          } else if (key.isReadable()) {
-
-            SocketChannel sc = null;
-
-            try {
-
-              // It's incoming data on a connection -- process it
-              sc = (SocketChannel) key.channel();
-              boolean ok = processInput(sc);
-
-              // If the connection is dead, remove it from the selector
-              // and close it
-              if (!ok) {
-                key.cancel();
-
-                Socket s = null;
-                try {
-                  s = sc.socket();
-                  System.out.println("Closing connection to " + s);
-                  s.close();
-                } catch (IOException ie) {
-                  System.err.println("Error closing socket " + s + ": " + ie);
-                }
-              }
-
-            } catch (IOException ie) {
-
-              // On exception, remove this channel from the selector
-              key.cancel();
-
-              try {
-                sc.close();
-              } catch (IOException ie2) {
-                System.out.println(ie2);
-              }
-
-              System.out.println("Closed " + sc);
-            }
           }
+          processKey(key);
         }
 
         // We remove the selected keys, because we've dealt with them.
+        if (!messages.isEmpty())
+          messages.remove(0);
         keys.clear();
       }
     } catch (IOException ie) {
@@ -121,8 +87,92 @@ public class ChatServer {
     }
   }
 
-  static private String prepareString(String message) {
-    return String.format("%s", message);
+  static private void processKey(SelectionKey key) {
+
+    SocketChannel sc = null;
+
+    if (key.isReadable()) {
+
+      try {
+
+        // It's incoming data on a connection -- process it
+        sc = (SocketChannel) key.channel();
+        boolean ok = processInput(sc);
+
+        // If the connection is dead, remove it from the selector
+        // and close it
+        if (!ok) {
+          key.cancel();
+
+          Socket s = null;
+          try {
+            s = sc.socket();
+            System.out.println("Closing connection to " + s);
+            s.close();
+          } catch (IOException ie) {
+            System.err.println("Error closing socket " + s + ": " + ie);
+          }
+          return;
+        }
+
+      } catch (IOException ie) {
+
+        // On exception, remove this channel from the selector
+        key.cancel();
+
+        try {
+          sc.close();
+        } catch (IOException ie2) {
+          System.out.println(ie2);
+        }
+
+        System.out.println("Closed " + sc);
+        return;
+      }
+    }
+    sc = null;
+    if (key.isWritable() && messages.isEmpty() == false) {
+
+      try {
+
+        // It's incoming data on a connection -- process it
+        sc = (SocketChannel) key.channel();
+        boolean ok = writeToSocket(sc, messages.getFirst());
+
+        // If the connection is dead, remove it from the selector
+        // and close it
+        if (!ok) {
+          key.cancel();
+
+          Socket s = null;
+          try {
+            s = sc.socket();
+            System.out.println("Closing connection to " + s);
+            s.close();
+          } catch (IOException ie) {
+            System.err.println("Error closing socket " + s + ": " + ie);
+          }
+        }
+
+      } catch (IOException ie) {
+
+        // On exception, remove this channel from the selector
+        key.cancel();
+
+        try {
+          sc.close();
+        } catch (IOException ie2) {
+          System.out.println(ie2);
+        }
+
+        System.out.println("Closed " + sc);
+      }
+    }
+  }
+
+  static private ByteBuffer prepareString(String message) {
+    String preparedMessage = String.format("%s", message);
+    return ByteBuffer.wrap(preparedMessage.getBytes());
   }
 
   // Just read the message from the socket and send it to stdout
@@ -140,8 +190,17 @@ public class ChatServer {
     // Decode and print the message to stdout
     String message = decoder.decode(buffer).toString();
     System.out.print(message);
-    sc.write(ByteBuffer.wrap(prepareString(message).getBytes()));
+    messages.add(message);
 
+    return true;
+  }
+
+  static private boolean writeToSocket(SocketChannel sc, String message) throws IOException {
+
+    ByteBuffer buf = prepareString(message);
+    while (buf.hasRemaining()) {
+      sc.write(buf);
+    }
     return true;
   }
 }
