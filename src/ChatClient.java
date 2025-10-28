@@ -1,6 +1,5 @@
 import java.io.*;
 import java.net.*;
-import java.util.*;
 import java.awt.*;
 import java.awt.event.*;
 import javax.swing.*;
@@ -12,8 +11,8 @@ public class ChatClient {
   private JTextField chatBox = new JTextField();
   private JTextArea chatArea = new JTextArea();
   private Socket clientSocket;
-  DataOutputStream outToServer;
-  BufferedReader inFromServer;
+  private DataOutputStream outToServer;
+  private BufferedReader inFromServer;
   // --- Fim das variáveis relacionadas coma interface gráfica
 
   // Se for necessário adicionar variáveis ao objecto ChatClient, devem
@@ -73,14 +72,35 @@ public class ChatClient {
   }
 
   // Método principal do objecto
-  public void run() throws IOException {
+  public void run() {
+    final Thread inThread = new Thread() {
+      @Override
+      public void run() {
+        boolean isGood = true;
+        try {
+          while (isGood) {
+            String message = inFromServer.readLine();
 
-    while (true) {
-      String message = inFromServer.readLine() + '\n';
+            if (message == null) {
+              isGood = false;
+              continue;
+            }
+            message += '\n';
 
-      printMessage(message);
-    }
+            printMessage(message);
+          }
+        } catch (IOException e) {
+        } finally {
+          frame.dispose();
+          try {
+            clientSocket.close();
+          } catch (Exception e) {
 
+          }
+        }
+      }
+    };
+    inThread.start();
   }
 
   // Instancia o ChatClient e arranca-o invocando o seu método run()

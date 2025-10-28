@@ -135,7 +135,6 @@ public class ChatServer {
 
       try {
 
-        // It's incoming data on a connection -- process it
         sc = (SocketChannel) key.channel();
         boolean ok = writeToSocket(sc, messages.getFirst());
 
@@ -155,8 +154,6 @@ public class ChatServer {
         }
 
       } catch (IOException ie) {
-
-        // On exception, remove this channel from the selector
         key.cancel();
 
         try {
@@ -198,9 +195,13 @@ public class ChatServer {
   static private boolean writeToSocket(SocketChannel sc, String message) throws IOException {
 
     ByteBuffer buf = prepareString(message);
-    while (buf.hasRemaining()) {
-      sc.write(buf);
-    }
-    return true;
+
+    int totalWrite = 0;
+    int totalSize = buf.remaining();
+
+    while (buf.hasRemaining())
+      totalWrite += sc.write(buf);
+
+    return totalWrite == totalSize;
   }
 }
