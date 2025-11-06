@@ -75,12 +75,13 @@ public class ChatServer {
 
           }
           processKey(key);
+
         }
 
         // We remove the selected keys, because we've dealt with them.
-        if (!messages.isEmpty())
-          messages.remove(0);
+        broadCastMessages(keys);
         keys.clear();
+        messages.clear();
       }
     } catch (IOException ie) {
       System.err.println(ie);
@@ -131,40 +132,6 @@ public class ChatServer {
       }
     }
     sc = null;
-    if (key.isWritable() && messages.isEmpty() == false) {
-
-      try {
-
-        sc = (SocketChannel) key.channel();
-        boolean ok = writeToSocket(sc, messages.getFirst());
-
-        // If the connection is dead, remove it from the selector
-        // and close it
-        if (!ok) {
-          key.cancel();
-
-          Socket s = null;
-          try {
-            s = sc.socket();
-            System.out.println("Closing connection to " + s);
-            s.close();
-          } catch (IOException ie) {
-            System.err.println("Error closing socket " + s + ": " + ie);
-          }
-        }
-
-      } catch (IOException ie) {
-        key.cancel();
-
-        try {
-          sc.close();
-        } catch (IOException ie2) {
-          System.out.println(ie2);
-        }
-
-        System.out.println("Closed " + sc);
-      }
-    }
   }
 
   static private ByteBuffer prepareString(String message) {
@@ -190,6 +157,56 @@ public class ChatServer {
     messages.add(message);
 
     return true;
+  }
+
+  static private void broadCastMessages(Set<SelectionKey> keys) {
+    if (messages.isEmpty())
+      return;
+    Iterator<SelectionKey> it = keys.iterator();
+    while (it.hasNext()) {
+
+      SelectionKey key = it.next();
+
+      SocketChannel sc = null;
+      if (key.isWritable()) {
+
+        try {
+
+          sc = (SocketChannel) key.channel();
+          for (String message : messages) {
+            boolean ok = writeToSocket(sc, message);
+
+            // If the connection is dead, remove it from the selector
+            // and close it
+            if (!ok) {
+              key.cancel();
+
+              Socket s = null;
+              try {
+                s = sc.socket();
+                System.out.println("Closing connection to " + s);
+                s.close();
+              } catch (IOException ie) {
+                System.err.println("Error closing socket " + s + ": " + ie);
+              }
+            }
+
+          }
+
+        } catch (IOException ie) {
+          key.cancel();
+
+          try {
+            sc.close();
+          } catch (IOException ie2) {
+            System.out.println(ie2);
+          }
+
+          System.out.println("Closed " + sc);
+        }
+      }
+    }
+
   }
 
   static private boolean writeToSocket(SocketChannel sc, String message) throws IOException {
