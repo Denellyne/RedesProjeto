@@ -6,6 +6,16 @@ import java.nio.charset.*;
 import java.util.*;
 
 public class ChatServer {
+  class User {
+    static private String nickname;
+
+    public User(String name) {
+      nickname = name;
+
+    }
+
+  }
+
   // A pre-allocated buffer for the received data
   static private final ByteBuffer buffer = ByteBuffer.allocate(16384);
 
@@ -134,9 +144,8 @@ public class ChatServer {
     sc = null;
   }
 
-  static private ByteBuffer prepareString(String message) {
-    String preparedMessage = String.format("%s", message);
-    return ByteBuffer.wrap(preparedMessage.getBytes());
+  static private ByteBuffer prepareStringForSocket(String message) {
+    return ByteBuffer.wrap(message.getBytes());
   }
 
   // Just read the message from the socket and send it to stdout
@@ -153,8 +162,12 @@ public class ChatServer {
 
     // Decode and print the message to stdout
     String message = decoder.decode(buffer).toString();
-    System.out.print(message);
-    messages.add(message);
+    // if (message.isEmpty())
+    // return true;
+
+    System.out.println(message);
+    String preparedMessage = String.format("%s:%s\n", sc.socket().getRemoteSocketAddress().toString(), message);
+    messages.add(preparedMessage);
 
     return true;
   }
@@ -211,7 +224,7 @@ public class ChatServer {
 
   static private boolean writeToSocket(SocketChannel sc, String message) throws IOException {
 
-    ByteBuffer buf = prepareString(message);
+    ByteBuffer buf = prepareStringForSocket(message);
 
     int totalWrite = 0;
     int totalSize = buf.remaining();
