@@ -68,7 +68,9 @@ public class ChatClient {
   // Método invocado sempre que o utilizador insere uma mensagem
   // na caixa de entrada
   public void newMessage(String message) throws IOException {
-    outToServer.writeBytes(message + '\n');
+
+    outToServer.write(message.getBytes());
+    outToServer.flush();
   }
 
   // Método principal do objecto
