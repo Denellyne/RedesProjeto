@@ -79,17 +79,15 @@ public class ChatClient {
       @Override
       public void run() {
         boolean isGood = true;
+        String message = "";
         try {
           while (isGood) {
-            String message = inFromServer.readLine();
-
+            message = readMessage();
             if (message == null) {
-              isGood = false;
-              continue;
+              break;
             }
-            message += '\n';
 
-            printMessage(message);
+            processMessage(message);
           }
         } catch (IOException e) {
         } finally {
@@ -103,6 +101,36 @@ public class ChatClient {
       }
     };
     inThread.start();
+  }
+
+  private String readMessage() throws IOException {
+
+    String message = inFromServer.readLine();
+
+    if (message == null)
+      return null;
+
+    message += '\n';
+    return message;
+  }
+
+  private void processMessage(String message) {
+    if (message.startsWith("MESSAGE")) {
+      message = message.substring("MESSAGE".length());
+      printMessage(message);
+      return;
+    }
+    if (message.startsWith("JOINED")) {
+      printMessage(String.format("%s joined the room\n", message.split(" ")[1]));
+      return;
+    }
+    if (message.startsWith("LEFT")) {
+      printMessage(String.format("%s left the room\n", message.split(" ")[1]));
+      return;
+    }
+
+    printMessage(message);
+    return;
   }
 
   // Instancia o ChatClient e arranca-o invocando o seu método run()

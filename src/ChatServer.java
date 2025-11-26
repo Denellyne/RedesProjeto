@@ -73,7 +73,9 @@ public class ChatServer {
             // It's an incoming connection. Register this socket with
             // the Selector so we can listen for input on it
             Socket s = ss.accept();
+
             System.out.println("Got connection from " + s);
+            messages.add(String.format("JOIN %s\n", ss.toString()));
 
             // Make sure to make it non-blocking, so we can use a selector
             // on it.
@@ -84,23 +86,28 @@ public class ChatServer {
             sc.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
           }
-          processKey(key);
+          if (processKey(key) == false) {
+            SocketChannel sc = (SocketChannel) key.channel();
+            messages.add(String.format("LEFT %s\n", sc.toString()));
+          }
 
         }
 
         // We remove the selected keys, because we've dealt with them.
         broadCastMessages(keys);
+
         keys.clear();
-        messages.clear();
       }
     } catch (IOException ie) {
       System.err.println(ie);
     }
   }
 
-  static private void processKey(SelectionKey key) {
+  static private boolean processKey(SelectionKey key) {
 
     SocketChannel sc = null;
+    if (key.isValid() == false)
+      return false;
 
     if (key.isReadable()) {
 
@@ -123,7 +130,7 @@ public class ChatServer {
           } catch (IOException ie) {
             System.err.println("Error closing socket " + s + ": " + ie);
           }
-          return;
+          return false;
         }
 
       } catch (IOException ie) {
@@ -138,10 +145,13 @@ public class ChatServer {
         }
 
         System.out.println("Closed " + sc);
-        return;
+        return false;
       }
+      sc = null;
+      return true;
     }
     sc = null;
+    return true;
   }
 
   static private ByteBuffer prepareStringForSocket(String message) {
@@ -165,22 +175,26 @@ public class ChatServer {
     // if (message.isEmpty())
     // return true;
 
-    System.out.println(message);
-    String preparedMessage = String.format("%s:%s\n", sc.socket().getRemoteSocketAddress().toString(), message);
+    String preparedMessage = String.format("MESSAGE %s:%s\n", sc.socket().getRemoteSocketAddress().toString(), message);
+    System.out.println(preparedMessage);
     messages.add(preparedMessage);
 
     return true;
   }
 
-  static private void broadCastMessages(Set<SelectionKey> keys) {
-    if (messages.isEmpty())
-      return;
+  static private boolean broadCastMessages(Set<SelectionKey> keys) {
+    if (messages.isEmpty() || keys.isEmpty())
+      return false;
     Iterator<SelectionKey> it = keys.iterator();
+
+    final List<String> messagesErrors = new ArrayList<>();
     while (it.hasNext()) {
 
       SelectionKey key = it.next();
 
       SocketChannel sc = null;
+      if (key.isValid() == false)
+        continue;
       if (key.isWritable()) {
 
         try {
@@ -192,6 +206,7 @@ public class ChatServer {
             // If the connection is dead, remove it from the selector
             // and close it
             if (!ok) {
+              messagesErrors.add(String.format("LEFT %s\n", sc.toString()));
               key.cancel();
 
               Socket s = null;
@@ -207,6 +222,7 @@ public class ChatServer {
           }
 
         } catch (IOException ie) {
+          messagesErrors.add(String.format("LEFT %s\n", sc.toString()));
           key.cancel();
 
           try {
@@ -220,6 +236,10 @@ public class ChatServer {
       }
     }
 
+    messages.clear();
+    for (String str : messagesErrors)
+      messages.add(str);
+    return messages.size() != 0;
   }
 
   static private boolean writeToSocket(SocketChannel sc, String message) throws IOException {
