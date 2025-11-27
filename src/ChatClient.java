@@ -115,11 +115,11 @@ public class ChatClient {
 
   private void processMessage(String message) {
     if (message.startsWith("MESSAGE")) {
-      message = message.substring("MESSAGE".length());
+      message = message.substring("MESSAGE".length() + 1);
       printMessage(message);
       return;
     }
-    if (message.startsWith("JOIN")) {
+    if (message.startsWith("JOINED")) {
       printMessage(String.format("%s joined the room", message.split(" ")[1]));
       return;
     }
@@ -127,7 +127,28 @@ public class ChatClient {
       printMessage(String.format("%s left the room", message.split(" ")[1]));
       return;
     }
+    if (message.startsWith("OK")) {
+      printMessage("Command success");
+      return;
+    }
+    if (message.startsWith("ERROR")) {
+      printMessage("Command failed");
+      return;
+    }
 
+    if (message.startsWith("NEWNICK")) {
+      String splitStr[] = message.split(" ");
+      printMessage(String.format("%s changed the name to %s", splitStr[1], splitStr[2]));
+      return;
+    }
+    if (message.startsWith("BYE")) {
+      printMessage("Bye");
+      try {
+        clientSocket.close();
+      } catch (IOException e) {
+      }
+      return;
+    }
     printMessage(message);
     return;
   }

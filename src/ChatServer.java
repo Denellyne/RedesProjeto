@@ -6,23 +6,108 @@ import java.nio.charset.*;
 import java.util.*;
 
 public class ChatServer {
-  class User {
-    static private String nickname;
+  private static class Room {
+    private final List<String> messages = new ArrayList<>();
+    private final List<String> messagesErrors = new ArrayList<>();
+    private String name;
+    private Integer clientCount = 0;
 
-    public User(String name) {
-      nickname = name;
-
+    Room(String name) {
+      this.name = name;
     }
 
+    public String getName() {
+      return name;
+    }
+
+    public void addClient() {
+      clientCount++;
+    }
+
+    public Integer removeClient(String nickname) {
+      clientCount--;
+      addMessage(String.format("LEFT %s\n", nickname));
+      return clientCount;
+    }
+
+    public Integer removeClientError(String nickname) {
+      clientCount--;
+      addMessageErrors(String.format("LEFT %s\n", nickname));
+      return clientCount;
+    }
+
+    public void addMessage(String message) {
+      messages.add(message);
+    }
+
+    private void addMessageErrors(String message) {
+      messagesErrors.add(message);
+    }
+
+    public void clearMessages() {
+      messages.clear();
+    }
+
+    public void enqueueErrors() {
+      for (String str : messagesErrors)
+        addMessage(str);
+      messagesErrors.clear();
+    }
+
+    public boolean writeToSocket(SocketChannel sc) throws IOException {
+
+      for (String msg : messages) {
+
+        ByteBuffer buf = prepareStringForSocket(msg);
+
+        int totalWrite = 0;
+        int totalSize = buf.remaining();
+
+        while (buf.hasRemaining())
+          totalWrite += sc.write(buf);
+        if (totalSize != totalWrite)
+          return false;
+      }
+      return true;
+    }
+
+  }
+
+  static private Room newRoom(String name) {
+    Room room = new Room(name);
+    room.addClient();
+    return room;
   }
 
   // A pre-allocated buffer for the received data
   static private final ByteBuffer buffer = ByteBuffer.allocate(16384);
 
+  static private final HashMap<String, SelectableChannel> names = new HashMap<>();
+  static private final HashMap<SelectableChannel, String> clients = new HashMap<>();
+  static private final HashMap<String, Room> rooms = new HashMap<>();
   // Decoder for incoming text -- assume UTF-8
   static private final Charset charset = Charset.forName("UTF8");
   static private final CharsetDecoder decoder = charset.newDecoder();
   static private final List<String> messages = new ArrayList<>();
+
+  static private void closeConnection(SelectionKey key) {
+
+    SocketChannel sc = (SocketChannel) key.channel();
+    String nickname = null;
+    for (String str : names.keySet()) {
+      if (names.get(str) == sc) {
+        nickname = str;
+        names.remove(nickname);
+        break;
+      }
+    }
+    if (clients.get(sc) != null) {
+      Room room = rooms.get(clients.get(sc));
+      clients.remove(sc);
+      if (room.removeClientError(nickname) == 0)
+        rooms.remove(room.getName());
+    }
+  }
 
   static public void main(String args[]) throws Exception {
     // Parse port from command line
@@ -75,7 +160,7 @@ public class ChatServer {
             Socket s = ss.accept();
 
             System.out.println("Got connection from " + s);
-            messages.add(String.format("JOIN %s\n", ss.toString()));
+            // messages.add(String.format("JOINED %s\n", ss.toString()));
 
             // Make sure to make it non-blocking, so we can use a selector
             // on it.
@@ -86,10 +171,8 @@ public class ChatServer {
             sc.register(selector, SelectionKey.OP_READ | SelectionKey.OP_WRITE);
 
           }
-          if (processKey(key) == false) {
-            SocketChannel sc = (SocketChannel) key.channel();
-            messages.add(String.format("LEFT %s\n", sc.toString()));
-          }
+          if (processKey(key) == false)
+            closeConnection(key);
 
         }
 
@@ -173,14 +256,142 @@ public class ChatServer {
     // if (message.isEmpty())
     // return true;
 
-    String preparedMessage = String.format("MESSAGE %s:%s\n", sc.socket().getRemoteSocketAddress().toString(), message);
+    String nickname = null;
+    for (String str : names.keySet()) {
+      if (names.get(str) == sc) {
+        nickname = str;
+        break;
+      }
+    }
+
+    if (message.startsWith("/bye")) {
+      Room room = rooms.get(clients.get(sc));
+      if (clients.get(sc) != null) {
+        clients.remove(sc);
+        if (rooms != null && room.removeClient(nickname) == 0) {
+          System.out.printf("room %s closed\n", room.getName());
+          rooms.remove(room.getName());
+        }
+      }
+      boolean ack = writeToSocket(sc, "BYE\n");
+      return !ack;
+    }
+    if (message.startsWith("/nick")) {
+      String name = message.substring("/nick".length() + 1);
+      String answer = new String();
+      if (names.get(name) == null) {
+        if (nickname != null)
+          names.remove(nickname);
+
+        names.put(name, (SelectableChannel) sc);
+        answer = "OK\n";
+        Room room = rooms.get(clients.get(sc));
+        if (room != null)
+          room.addMessage(String.format("NEWNICK %s %s\n", nickname, name));
+      } else
+        answer = "ERROR\n";
+
+      return writeToSocket(sc, answer);
+    }
+    if (nickname == null)
+      return writeToSocket(sc, "ERROR\n");
+
+    if (message.startsWith("/join")) {
+      if (clients.get(sc) != null) {
+        Room room = rooms.get(clients.get(sc));
+        clients.remove(sc);
+        if (room.removeClient(nickname) == 0) {
+
+          System.out.printf("room %s closed\n", room.getName());
+          rooms.remove(room.getName());
+        }
+      }
+      String name = message.substring("/join".length() + 1);
+      String answer = "OK\n";
+
+      Room room = rooms.get(name);
+      if (room == null)
+        room = newRoom(name);
+      else
+        room.addClient();
+      rooms.put(name, room);
+      clients.put(sc, name);
+      room.addMessage(String.format("JOINED %s\n", nickname));
+
+      return writeToSocket(sc, answer);
+    }
+
+    Room room = rooms.get(clients.get(sc));
+    if (room == null)
+      return writeToSocket(sc, "ERROR\n");
+
+    if (message.startsWith("/leave")) {
+      if (clients.get(sc) != null) {
+        clients.remove(sc);
+        if (room.removeClient(nickname) == 0) {
+          System.out.printf("room %s closed\n", room.getName());
+          rooms.remove(room.getName());
+        }
+      }
+      return writeToSocket(sc, "OK\n");
+    }
+    String preparedMessage = String.format("MESSAGE %s:%s\n", nickname, message);
     System.out.println(preparedMessage);
-    messages.add(preparedMessage);
+    room.addMessage(preparedMessage);
 
     return true;
   }
 
   static private boolean broadCastMessages(Set<SelectionKey> keys) {
+    if (keys.isEmpty())
+      return false;
+    Iterator<SelectionKey> it = keys.iterator();
+    boolean hadErrors = false;
+    while (it.hasNext()) {
+
+      SelectionKey key = it.next();
+
+      SocketChannel sc = null;
+      if (key.isValid() == false)
+        continue;
+      if (key.isWritable()) {
+
+        try {
+
+          sc = (SocketChannel) key.channel();
+          Room room = rooms.get(clients.get(sc));
+          if (room == null)
+            continue;
+          if (room.writeToSocket(sc) == false) {
+            key.cancel();
+            sc.close();
+            hadErrors = true;
+            closeConnection(key);
+          }
+
+        } catch (IOException ie) {
+          key.cancel();
+
+          try {
+            sc.close();
+          } catch (IOException ie2) {
+            System.out.println(ie2);
+          }
+
+          System.out.println("Closed " + sc);
+        }
+      }
+    }
+    for (Room room : rooms.values()) {
+      room.clearMessages();
+      room.enqueueErrors();
+    }
+
+    return hadErrors;
+
+  }
+
+  static private boolean broadCastMessagesE(Set<SelectionKey> keys) {
     if (messages.isEmpty() || keys.isEmpty())
       return false;
     Iterator<SelectionKey> it = keys.iterator();
