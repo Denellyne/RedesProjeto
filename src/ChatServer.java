@@ -93,9 +93,7 @@ public class ChatServer {
 
         }
 
-        // We remove the selected keys, because we've dealt with them.
         broadCastMessages(keys);
-
         keys.clear();
       }
     } catch (IOException ie) {

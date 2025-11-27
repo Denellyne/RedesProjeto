@@ -21,7 +21,7 @@ public class ChatClient {
   // Método a usar para acrescentar uma string à caixa de texto
   // * NÃO MODIFICAR *
   public void printMessage(final String message) {
-    chatArea.append(message);
+    chatArea.append(message + '\n');
   }
 
   // Construtor
@@ -110,7 +110,6 @@ public class ChatClient {
     if (message == null)
       return null;
 
-    message += '\n';
     return message;
   }
 
@@ -120,12 +119,12 @@ public class ChatClient {
       printMessage(message);
       return;
     }
-    if (message.startsWith("JOINED")) {
-      printMessage(String.format("%s joined the room\n", message.split(" ")[1]));
+    if (message.startsWith("JOIN")) {
+      printMessage(String.format("%s joined the room", message.split(" ")[1]));
       return;
     }
     if (message.startsWith("LEFT")) {
-      printMessage(String.format("%s left the room\n", message.split(" ")[1]));
+      printMessage(String.format("%s left the room", message.split(" ")[1]));
       return;
     }
 
