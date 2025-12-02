@@ -69,6 +69,7 @@ public class ChatClient {
   // na caixa de entrada
   public void newMessage(String message) throws IOException {
 
+    message += '\n';
     outToServer.write(message.getBytes());
     outToServer.flush();
   }

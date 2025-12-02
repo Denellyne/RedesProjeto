@@ -6,6 +6,32 @@ import java.nio.charset.*;
 import java.util.*;
 
 public class ChatServer {
+
+  private static class User {
+    private String str = "";
+    private int idx = 0;
+
+    public boolean writeToBuffer(String message) {
+      if (idx + message.length() >= 16384)
+        return false;
+
+      str += message;
+      idx += message.length();
+
+      return true;
+    }
+
+    public void clearBuffer() {
+      str = "";
+      idx = 0;
+    }
+
+    public String getString() {
+      return str;
+    }
+
+  }
+
   private static class Room {
     private final List<String> messages = new ArrayList<>();
     private final List<String> messagesErrors = new ArrayList<>();
@@ -79,12 +105,18 @@ public class ChatServer {
     return room;
   }
 
+  static private User newUser() {
+    User usr = new User();
+    return usr;
+  }
+
   // A pre-allocated buffer for the received data
   static private final ByteBuffer buffer = ByteBuffer.allocate(16384);
 
   static private final HashMap<String, SelectableChannel> names = new HashMap<>();
   static private final HashMap<SelectableChannel, String> clients = new HashMap<>();
   static private final HashMap<String, Room> rooms = new HashMap<>();
+  static private final HashMap<SelectableChannel, User> users = new HashMap<>();
   // Decoder for incoming text -- assume UTF-8
   static private final Charset charset = Charset.forName("UTF8");
   static private final CharsetDecoder decoder = charset.newDecoder();
@@ -106,6 +138,9 @@ public class ChatServer {
       clients.remove(sc);
       if (room.removeClientError(nickname) == 0)
         rooms.remove(room.getName());
+    }
+    if (users.get(sc) != null) {
+      users.remove(sc);
     }
   }
 
@@ -253,8 +288,35 @@ public class ChatServer {
 
     // Decode and print the message to stdout
     String message = decoder.decode(buffer).toString();
+
     // if (message.isEmpty())
     // return true;
+
+    if (message.endsWith("\n")) {
+
+      User usr = users.get(sc);
+      if (usr == null) {
+        usr = newUser();
+        users.put(sc, usr);
+      }
+      boolean ret = usr.writeToBuffer(message);
+      if (ret == false)
+        return false;
+      message = usr.getString();
+      usr.clearBuffer();
+      System.out.println(message);
+      message = message.substring(0, message.length() - 1);
+    } else {
+      User usr = users.get(sc);
+      if (usr == null) {
+        usr = newUser();
+        users.put(sc, usr);
+      }
+      boolean ret = usr.writeToBuffer(message);
+      if (ret == false)
+        return false;
+      return true;
+    }
 
     String nickname = null;
     for (String str : names.keySet()) {
@@ -335,6 +397,8 @@ public class ChatServer {
       }
       return writeToSocket(sc, "OK\n");
     }
+    if (message.startsWith("//"))
+      message = message.substring(1);
     String preparedMessage = String.format("MESSAGE %s:%s\n", nickname, message);
     System.out.println(preparedMessage);
     room.addMessage(preparedMessage);
