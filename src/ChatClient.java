@@ -116,8 +116,7 @@ public class ChatClient {
 
   private void processMessage(String message) {
     if (message.startsWith("MESSAGE")) {
-      message = message.substring("MESSAGE".length() + 1);
-      printMessage(message);
+      printMessage(message.split(" ")[1]);
       return;
     }
     if (message.startsWith("JOINED")) {
