@@ -111,8 +111,8 @@ public class ChatClient {
   }
 
   private void processMessage(String message) {
-    if (message.startsWith("MESSAGEPRIV")) {
-      printMessage("Private Message from " + message.substring("MESSAGEPRIV".length() + 1));
+    if (message.startsWith("PRIVATE")) {
+      printMessage("Private Message from " + message.substring("PRIVATE".length() + 1));
       return;
     }
     if (message.startsWith("MESSAGE")) {
