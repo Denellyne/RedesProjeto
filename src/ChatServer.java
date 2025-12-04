@@ -329,6 +329,9 @@ public class ChatServer {
           .substring(splitMessage[0].length() + 1 + splitMessage[1].length() + 1);
       String answer = new String();
       String usr2 = splitMessage[1];
+      if (usr2.equals(nickname))
+        return writeToSocket(sc, "ERROR\n");
+
       msg = "PRIVATE " + nickname + " " + msg + '\n';
       if (names.get(usr2) != null) {
         answer = "OK\n";
