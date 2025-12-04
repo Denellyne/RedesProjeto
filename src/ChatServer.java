@@ -298,7 +298,10 @@ public class ChatServer {
       return !ack;
     }
     if (message.startsWith("/nick")) {
-      String name = message.substring("/nick".length() + 1);
+      if (message.split(" ").length < 2)
+        return writeToSocket(sc, "ERROR\n");
+
+      String name = message.split(" ")[1];
       String answer = new String();
       if (names.get(name) == null) {
         if (nickname != null)
@@ -326,7 +329,7 @@ public class ChatServer {
           .substring(splitMessage[0].length() + 1 + splitMessage[1].length() + 1);
       String answer = new String();
       String usr2 = splitMessage[1];
-      msg = "MESSAGEPRIV " + nickname + " " + msg;
+      msg = "MESSAGEPRIV " + nickname + " " + msg + '\n';
       if (names.get(usr2) != null) {
         answer = "OK\n";
         return writeToSocket(sc, answer) &&
@@ -338,6 +341,8 @@ public class ChatServer {
     }
 
     if (message.startsWith("/join")) {
+      if (message.split(" ").length < 2)
+        return writeToSocket(sc, "ERROR\n");
       if (clients.get(sc) != null) {
         Room room = rooms.get(clients.get(sc));
         clients.remove(sc);
@@ -347,7 +352,7 @@ public class ChatServer {
           rooms.remove(room.getName());
         }
       }
-      String name = message.substring("/join".length() + 1);
+      String name = message.split(" ")[1];
       String answer = "OK\n";
 
       Room room = rooms.get(name);
