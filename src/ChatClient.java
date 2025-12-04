@@ -87,6 +87,7 @@ public class ChatClient {
             if (message == null) {
               break;
             }
+            System.out.println(message);
 
             processMessage(message);
           }
@@ -106,17 +107,16 @@ public class ChatClient {
 
   private String readMessage() throws IOException {
 
-    String message = inFromServer.readLine();
-
-    if (message == null)
-      return null;
-
-    return message;
+    return inFromServer.readLine();
   }
 
   private void processMessage(String message) {
+    if (message.startsWith("MESSAGEPRIV")) {
+      printMessage("Private Message from " + message.substring("MESSAGEPRIV".length() + 1));
+      return;
+    }
     if (message.startsWith("MESSAGE")) {
-      printMessage(message.split(" ")[1]);
+      printMessage(message.substring("MESSAGE".length() + 1));
       return;
     }
     if (message.startsWith("JOINED")) {

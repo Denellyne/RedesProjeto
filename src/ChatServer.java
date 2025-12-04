@@ -274,49 +274,8 @@ public class ChatServer {
     return ByteBuffer.wrap(message.getBytes());
   }
 
-  // Just read the message from the socket and send it to stdout
-  static private boolean processInput(SocketChannel sc) throws IOException {
-    // Read the message to the buffer
-    buffer.clear();
-    sc.read(buffer);
-    buffer.flip();
-
-    // If no data, close the connection
-    if (buffer.limit() == 0) {
-      return false;
-    }
-
-    // Decode and print the message to stdout
-    String message = decoder.decode(buffer).toString();
-
-    // if (message.isEmpty())
-    // return true;
-
-    if (message.endsWith("\n")) {
-
-      User usr = users.get(sc);
-      if (usr == null) {
-        usr = newUser();
-        users.put(sc, usr);
-      }
-      boolean ret = usr.writeToBuffer(message);
-      if (ret == false)
-        return false;
-      message = usr.getString();
-      usr.clearBuffer();
-      System.out.println(message);
-      message = message.substring(0, message.length() - 1);
-    } else {
-      User usr = users.get(sc);
-      if (usr == null) {
-        usr = newUser();
-        users.put(sc, usr);
-      }
-      boolean ret = usr.writeToBuffer(message);
-      if (ret == false)
-        return false;
-      return true;
-    }
+  static private boolean processInputEx(SocketChannel sc, String message) throws IOException {
+    System.out.println(message);
 
     String nickname = null;
     for (String str : names.keySet()) {
@@ -357,6 +316,26 @@ public class ChatServer {
     }
     if (nickname == null)
       return writeToSocket(sc, "ERROR\n");
+
+    if (message.startsWith("/priv")) {
+      String[] splitMessage = message.split(" ");
+      if (splitMessage.length < 2)
+        return writeToSocket(sc, "ERROR\n");
+
+      String msg = message
+          .substring(splitMessage[0].length() + 1 + splitMessage[1].length() + 1);
+      String answer = new String();
+      String usr2 = splitMessage[1];
+      msg = "MESSAGEPRIV " + nickname + " " + msg;
+      if (names.get(usr2) != null) {
+        answer = "OK\n";
+        return writeToSocket(sc, answer) &&
+            writeToSocket((SocketChannel) names.get(usr2), msg);
+      } else
+        answer = "ERROR\n";
+
+      return writeToSocket(sc, answer);
+    }
 
     if (message.startsWith("/join")) {
       if (clients.get(sc) != null) {
@@ -402,6 +381,56 @@ public class ChatServer {
     String preparedMessage = String.format("MESSAGE %s:%s\n", nickname, message);
     System.out.println(preparedMessage);
     room.addMessage(preparedMessage);
+    return true;
+  }
+
+  // Just read the message from the socket and send it to stdout
+  static private boolean processInput(SocketChannel sc) throws IOException {
+    // Read the message to the buffer
+    buffer.clear();
+    sc.read(buffer);
+    buffer.flip();
+
+    // If no data, close the connection
+    if (buffer.limit() == 0) {
+      return false;
+    }
+
+    // Decode and print the message to stdout
+    String message = decoder.decode(buffer).toString();
+    if (message.endsWith("\n")) {
+
+      User usr = users.get(sc);
+      if (usr == null) {
+        usr = newUser();
+        users.put(sc, usr);
+      }
+      boolean ret = usr.writeToBuffer(message);
+      if (ret == false)
+        return false;
+      message = usr.getString();
+      usr.clearBuffer();
+      // message = message.substring(0, message.length() - 1);
+    } else {
+      User usr = users.get(sc);
+      if (usr == null) {
+        usr = newUser();
+        users.put(sc, usr);
+      }
+      boolean ret = usr.writeToBuffer(message);
+      if (ret == false)
+        return false;
+      return true;
+    }
+
+    String[] messages = message.split("\n");
+    for (String msg : messages) {
+      if (!processInputEx(sc, msg))
+        return false;
+    }
+
+    // if (message.isEmpty())
+    // return true;
 
     return true;
   }
