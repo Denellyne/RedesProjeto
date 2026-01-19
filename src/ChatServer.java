@@ -5,7 +5,23 @@ import java.nio.channels.*;
 import java.nio.charset.*;
 import java.util.*;
 
+
 public class ChatServer {
+private static class Pair<A, B> {
+    public final A first;
+    public final B second;
+
+    public Pair(A first, B second) {
+        this.first = first;
+        this.second = second;
+    }
+    public A getKey(){
+      return first;
+    }
+    public B getValue(){
+      return second;
+    }
+}
 
   private static class User {
     private String str = "";
@@ -33,7 +49,7 @@ public class ChatServer {
   }
 
   private static class Room {
-    private final List<String> messages = new ArrayList<>();
+    private final List<Pair<SocketChannel,String>> messages = new ArrayList<>();
     private final List<String> messagesErrors = new ArrayList<>();
     private String name;
     private Integer clientCount = 0;
@@ -52,7 +68,7 @@ public class ChatServer {
 
     public Integer removeClient(String nickname) {
       clientCount--;
-      addMessage(String.format("LEFT %s\n", nickname));
+      addMessage(String.format("LEFT %s\n", nickname),null);
       return clientCount;
     }
 
@@ -62,8 +78,8 @@ public class ChatServer {
       return clientCount;
     }
 
-    public void addMessage(String message) {
-      messages.add(message);
+    public void addMessage(String message, SocketChannel sc){
+      messages.add(new Pair<>(sc,message));
     }
 
     private void addMessageErrors(String message) {
@@ -76,15 +92,17 @@ public class ChatServer {
 
     public void enqueueErrors() {
       for (String str : messagesErrors)
-        addMessage(str);
+        addMessage(str,null);
       messagesErrors.clear();
     }
 
     public boolean writeToSocket(SocketChannel sc) throws IOException {
 
-      for (String msg : messages) {
+      for (Pair<SocketChannel,String> msg : messages) {
+        if(msg.getKey() != null && msg.getKey().equals(sc) ) continue;
 
-        ByteBuffer buf = prepareStringForSocket(msg);
+
+        ByteBuffer buf = prepareStringForSocket(msg.getValue());
 
         int totalWrite = 0;
         int totalSize = buf.remaining();
@@ -311,7 +329,7 @@ public class ChatServer {
         answer = "OK\n";
         Room room = rooms.get(clients.get(sc));
         if (room != null)
-          room.addMessage(String.format("NEWNICK %s %s\n", nickname, name));
+          room.addMessage(String.format("NEWNICK %s %s\n", nickname, name),sc);
       } else
         answer = "ERROR\n";
 
@@ -365,7 +383,7 @@ public class ChatServer {
         room.addClient();
       rooms.put(name, room);
       clients.put(sc, name);
-      room.addMessage(String.format("JOINED %s\n", nickname));
+      room.addMessage(String.format("JOINED %s\n", nickname),sc);
 
       return writeToSocket(sc, answer);
     }
@@ -388,7 +406,7 @@ public class ChatServer {
       message = message.substring(1);
     String preparedMessage = String.format("MESSAGE %s:%s\n", nickname, message);
     System.out.println(preparedMessage);
-    room.addMessage(preparedMessage);
+    room.addMessage(preparedMessage,null);
     return true;
   }
 
